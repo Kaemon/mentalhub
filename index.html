@@ -268,7 +268,7 @@ body > footer .wrap{display:flex; justify-content:space-between; gap:16px; flex-
           <a class="btn btn-primary" href="#check">Start the check-in</a>
           <a class="btn btn-ghost" href="#help">See helplines</a>
         </div>
-        <p class="hero-meta">22 questions, about 4 minutes, fully anonymous.</p>
+        <p class="hero-meta">21 questions, about 4 minutes. Nothing is saved.</p>
       </div>
       <div class="battery" aria-label="Illustration: a typical 3rd year week draining your battery">
         <div class="battery-label"><span>Your battery, week 9</span><span>12%</span></div>
@@ -375,11 +375,6 @@ body > footer .wrap{display:flex; justify-content:space-between; gap:16px; flex-
 </footer>
 
 <script>
-/* ============ CONFIG ============ */
-const CONFIG = {
-  // Paste your Google Apps Script web app URL here (see apps-script.gs). Leave "" for demo mode.
-  endpoint: "",
-};
 
 /* ============ Questionnaires ============ */
 const FREQ5 = ["Never", "Almost never", "Sometimes", "Fairly often", "Very often"];
@@ -424,7 +419,6 @@ const PARTS = {
 };
 const PART_ORDER = ["pss", "gad", "work"];
 const TOTAL_Q = PART_ORDER.reduce((n, p) => n + PARTS[p].items.length, 0);
-const YEARS = ["Foundation / Diploma", "Year 1", "Year 2", "Year 3", "Other / prefer not to say"];
 
 // Flat list of question steps
 const STEPS = PART_ORDER.flatMap(p => PARTS[p].items.map((_, i) => ({part:p, i})));
@@ -542,21 +536,16 @@ const MEANING = {
 
 /* ============ Helpers ============ */
 const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const session = (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2));
-const store = {
-  get(k, d){ try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } },
-  set(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
-};
 const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 function actions(id, r){
   const a = [];
-  if (r.tel) a.push(`<a class="chip call" href="tel:${r.tel}" data-res="${id}">Call</a>`);
-  if (r.wa) a.push(`<a class="chip" href="https://wa.me/${r.wa}" target="_blank" rel="noopener" data-res="${id}">WhatsApp</a>`);
-  if (r.email) a.push(`<a class="chip" href="mailto:${r.email}" data-res="${id}">Email</a>`);
-  if (r.web) a.push(`<a class="chip" href="${r.web}" target="_blank" rel="noopener" data-res="${id}">Website</a>`);
-  if (r.phone && !r.tel) a.push(`<a class="chip call" href="tel:${r.phone}" data-res="${id}">Call ${esc(r.phone)}</a>`);
-  if (r.phone) a.push(`<button class="chip" type="button" data-copy="${esc(r.phone.replace(/\s/g, ""))}" data-res="${id}">Copy number</button>`);
+  if (r.tel) a.push(`<a class="chip call" href="tel:${r.tel}">Call</a>`);
+  if (r.wa) a.push(`<a class="chip" href="https://wa.me/${r.wa}" target="_blank" rel="noopener">WhatsApp</a>`);
+  if (r.email) a.push(`<a class="chip" href="mailto:${r.email}">Email</a>`);
+  if (r.web) a.push(`<a class="chip" href="${r.web}" target="_blank" rel="noopener">Website</a>`);
+  if (r.phone && !r.tel) a.push(`<a class="chip call" href="tel:${r.phone}">Call ${esc(r.phone)}</a>`);
+  if (r.phone) a.push(`<button class="chip" type="button" data-copy="${esc(r.phone.replace(/\s/g, ""))}">Copy number</button>`);
   return `<div class="line-actions">${a.join("")}</div>`;
 }
 
@@ -603,7 +592,7 @@ function renderSupport(level){
 renderSupport(null);
 
 function articleLi(id, a){
-  return `<li><a href="${a.url}" target="_blank" rel="noopener" data-article="${id}">
+  return `<li><a href="${a.url}" target="_blank" rel="noopener">
     <span class="a-title">${esc(a.t)}</span><span class="a-src">${esc(a.src)}</span><span class="a-go" aria-hidden="true">Open</span></a></li>`;
 }
 
@@ -622,43 +611,17 @@ document.addEventListener("click", e => {
   if (!id || !document.getElementById(id)) return;
   e.preventDefault();
   goTo(id);
-  if (["help", "clinics"].includes(id)) track("help_click", id);
-});
-
-/* ============ Data layer ============ */
-function send(payload){
-  const body = JSON.stringify({...payload, session});
-  if (CONFIG.endpoint) {
-    fetch(CONFIG.endpoint, {method:"POST", mode:"no-cors", body}).catch(() => {});
-  } else {
-    const local = store.get("mentalhub-local", []);
-    local.push({...payload, session});
-    store.set("mentalhub-local", local);
-  }
-}
-const tracked = new Set();
-function track(type, resource){
-  const key = type + ":" + resource;
-  if (tracked.has(key)) return;
-  tracked.add(key);
-  send({type, resource});
-}
-document.addEventListener("click", e => {
-  const r = e.target.closest("[data-res]");
-  if (r) track("contact_click", r.dataset.res);
-  const a = e.target.closest("[data-article]");
-  if (a) track("article_click", a.dataset.article);
 });
 
 /* ============ Quiz UI ============ */
 const quiz = document.getElementById("quiz");
-const fresh = () => ({step:"intro", i:0, year:null, answers:{pss:Array(10).fill(null), gad:Array(7).fill(null), work:Array(4).fill(null)}});
+const fresh = () => ({step:"intro", i:0, answers:{pss:Array(10).fill(null), gad:Array(7).fill(null), work:Array(4).fill(null)}});
 let state = fresh();
 let busy = false, dir = 1, prevPct = 0, started = false;
 
 function render(){
   const h0 = quiz.offsetHeight;
-  ({intro:renderIntro, year:renderYear, q:renderQ, result:renderResult})[state.step]();
+  ({intro:renderIntro, q:renderQ, result:renderResult})[state.step]();
   busy = false;
   [...quiz.children].forEach(c => c.classList.add(dir > 0 ? "step-in" : "step-back"));
   if (started && !reduceMotion) {
@@ -691,43 +654,25 @@ function renderIntro(){
       </div>
       <ul>
         <li>There are no right or wrong answers. Go with your first instinct.</li>
-        <li>We only save your answers and year of study. No name, email or student ID.</li>
+        <li>Nothing is saved or sent anywhere. Your answers stay in your browser and disappear when you leave the page.</li>
         <li>At the end you'll get a score for stress, anxiety, workload and overwhelm, plus support and reading picked for your result.</li>
       </ul>
       <div><button class="btn btn-primary" id="start" type="button">Start the check-in</button></div>
       <p class="disclaimer">This check-in is a self-reflection tool, not a medical diagnosis.</p>
     </div>`;
-  quiz.querySelector("#start").onclick = () => { dir = 1; state.step = "year"; render(); };
+  quiz.querySelector("#start").onclick = () => { dir = 1; state.step = "q"; state.i = 0; render(); };
 }
 
 function header(qNum, partKey){
   const pct = Math.round(qNum / TOTAL_Q * 100);
   const partIdx = PART_ORDER.indexOf(partKey);
-  const left = partKey
-    ? `<span><strong>Part ${partIdx + 1} of 3: ${PARTS[partKey].name}</strong></span>`
-    : `<span>Getting started</span>`;
-  return `<div class="quiz-top" aria-live="polite">${left}<span>${qNum ? `Question ${qNum} of ${TOTAL_Q}` : ""}</span></div>
+  return `<div class="quiz-top" aria-live="polite"><span><strong>Part ${partIdx + 1} of 3: ${PARTS[partKey].name}</strong></span><span>Question ${qNum} of ${TOTAL_Q}</span></div>
           <div class="progress"><span style="width:${pct}%"></span></div>`;
 }
 
 function optionsHtml(list, selected, base){
   return `<div class="options">${list.map((o, k) =>
     `<button type="button" class="opt ${selected === k ? "sel" : ""}" data-v="${k}"><span class="k">${k + base}</span>${esc(o)}</button>`).join("")}</div>`;
-}
-
-function renderYear(){
-  quiz.innerHTML = header(0, null) + `
-    <p class="q-stem">One quick question first</p>
-    <p class="q-text" tabindex="-1">Which year are you in?</p>
-    ${optionsHtml(YEARS, YEARS.indexOf(state.year), 1)}
-    <div class="quiz-nav"><button class="linkbtn" id="back" type="button">Back</button></div>`;
-  quiz.querySelectorAll(".opt").forEach(b => b.onclick = () => {
-    if (busy) return; busy = true;
-    state.year = YEARS[+b.dataset.v];
-    quiz.querySelectorAll(".opt").forEach(o => o.classList.toggle("sel", o === b));
-    setTimeout(() => { dir = 1; state.step = "q"; state.i = 0; render(); }, 220);
-  });
-  quiz.querySelector("#back").onclick = () => { if (busy) return; dir = -1; state.step = "intro"; render(); };
 }
 
 function renderQ(){
@@ -752,22 +697,21 @@ function renderQ(){
   quiz.querySelector("#back").onclick = () => {
     if (busy) return;
     dir = -1;
-    if (state.i === 0) state.step = "year"; else state.i--;
+    if (state.i === 0) state.step = "intro"; else state.i--;
     render();
   };
 }
 
 quiz.addEventListener("keydown", e => {
-  if (!["year", "q"].includes(state.step) || e.altKey || e.ctrlKey || e.metaKey) return;
+  if (state.step !== "q" || e.altKey || e.ctrlKey || e.metaKey) return;
   const opts = quiz.querySelectorAll(".opt");
-  const n = state.step === "q" ? +e.key : +e.key - 1;
+  const n = +e.key;
   if (e.key.length === 1 && n >= 0 && n < opts.length) { e.preventDefault(); opts[n].click(); }
 });
 
 function finish(){
   const scores = scoreAll(state.answers);
   const level = overallLevel(scores);
-  send({type:"quiz", year:state.year, answers:state.answers, scores, level});
   Object.assign(state, {step:"result", scores, level});
   dir = 1;
   render();
